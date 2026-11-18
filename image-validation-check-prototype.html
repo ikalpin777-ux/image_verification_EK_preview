@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="color-scheme" content="light dark"/>
+<link rel="icon" href="data:,"/>
+<title>Image Validation Check Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f5f3; --surface:#ffffff; --surface2:#eceee9; --ink:#17201a; --muted:#5c6a60; --line:#d9ddd6;
+  --navy:#12312b; --accent:#c8102e;
+  --radius:14px; --shadow:0 8px 24px rgba(18,49,43,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#101512; --surface:#1a211c; --surface2:#232b25; --ink:#edf2ee; --muted:#a7b5aa; --line:#334038; --navy:#d7ebe2; --shadow:0 8px 24px rgba(0,0,0,.35); }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Public Sans",system-ui,sans-serif;line-height:1.5}
+a{color:inherit}
+.mono{font-family:"IBM Plex Mono",monospace}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 18px 48px}
+h1{font-size:clamp(24px,4vw,34px);line-height:1.05;letter-spacing:-.02em;margin:0 0 14px;font-weight:900}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:11px 16px;border-radius:999px;font-weight:800;cursor:pointer;font-size:14px;display:inline-block;text-decoration:none}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.dark{background:var(--navy);border-color:var(--navy);color:#fff;width:100%;text-align:center;margin-top:10px}
+@media(prefers-color-scheme:dark){.btn.dark{background:#d7ebe2;color:#12312b;border-color:#d7ebe2}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+/* Upload */
+.upload{padding:22px;text-align:center;border:1.5px dashed var(--line);cursor:pointer}
+.upload.dragging{outline:3px dashed var(--accent);outline-offset:-3px}
+.upload b{font-size:19px;display:block;margin-bottom:4px}
+.upload span{color:var(--muted);font-size:14px;font-weight:600}
+.upload .btn{margin-top:14px;pointer-events:none}
+/* Toolbar */
+.toolbar{display:none;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0 10px}
+.toolbar.show{display:flex}
+.toolbar .fileinfo{font-size:13px;font-weight:700;color:var(--muted);width:100%}
+input[type=search],select{padding:10px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:14px}
+input[type=search]{flex:1;min-width:170px}
+/* Results */
+.results{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:900px){.results{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.results{grid-template-columns:1fr}}
+.store{padding:12px}
+.store-name{font-weight:900;font-size:16px;margin-top:10px}
+.store-meta{font-size:12.5px;color:var(--muted)}
+.imgframe{border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--surface2);aspect-ratio:285/279}
+.imgframe img{display:block;width:100%;height:100%;object-fit:cover}
+.imgframe a{display:block;width:100%;height:100%}
+.imgfail{display:none;place-items:center;height:100%;color:var(--muted);font-weight:700;font-size:13px;padding:12px;text-align:center}
+#moreBtn{display:none;width:100%;margin-top:12px}
+#empty{display:none;text-align:center;color:var(--muted);padding:22px;font-weight:700}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:#111;color:#fff;padding:11px 15px;border-radius:999px;font-weight:700;font-size:13.5px;display:none;z-index:60;max-width:92vw;text-align:center}
+.toast.show{display:block}
+#dropOverlay{position:fixed;inset:12px;border:3px dashed var(--accent);border-radius:18px;background:var(--surface);opacity:.97;display:none;place-items:center;z-index:70;text-align:center;padding:20px}
+#dropOverlay.show{display:grid}
+#dropOverlay b{font-size:clamp(22px,4vw,34px);display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Front covers by store</h1>
+
+  <section class="card upload" id="uploadBox" role="button" tabindex="0" aria-label="Upload feed file">
+    <b>Upload the feed file</b>
+    <span>.csv · .tsv · .txt — or drop it anywhere on this page</span><br>
+    <span class="btn primary">Choose file</span>
+  </section>
+  <input id="csvFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain" hidden>
+
+  <div class="toolbar" id="toolbar">
+    <span class="fileinfo mono" id="fileInfo"></span>
+    <select id="bannerSel" aria-label="Banner"><option value="">All banners</option></select>
+    <input type="search" id="search" placeholder="Search store number, name or city…">
+  </div>
+
+  <div class="results" id="results"></div>
+  <p id="empty">No stores match that search.</p>
+  <button class="btn" id="moreBtn">Show more stores</button>
+</div>
+
+<div id="dropOverlay" aria-hidden="true"><div><b>Drop the feed file to load it</b></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+var DOMAIN_KEY={acmemarkets:'acmemarkets',safeway:'safeway',vons:'vons',pavilions:'pavilions',randalls:'randalls',carrsqc:'carrsqc',tomthumb:'tomthumb',jewelosco:'jewelosco',albertsons:'albertsons',shaws:'shaws',starmarket:'starmarket',haggen:'haggen',kingsfoodmarkets:'kingsfoodmarkets',balduccis:'balduccis',andronicos:'andronicos',albertsonsmarket:'shopalbertsonsmarket',amigosunited:'shopamigos',amigos:'amigosunited',unitedsupermarkets:'shopunitedsupermarkets',united:'shopunitedsupermarkets',marketstreet:'shopmarketstreet',marketstreetutd:'shopmarketstreet'};
+var BANNER_NAME={acmemarkets:'ACME',safeway:'Safeway',vons:'Vons',pavilions:'Pavilions',randalls:'Randalls',carrsqc:'Carrs',tomthumb:'Tom Thumb',jewelosco:'Jewel-Osco',albertsons:'Albertsons',shaws:"Shaw's",starmarket:'Star Market',haggen:'Haggen',kingsfoodmarkets:'Kings',balduccis:"Balducci's",andronicos:"Andronico's",albertsonsmarket:'Albertsons Market',amigosunited:'Amigos',amigos:'Amigos',unitedsupermarkets:'United',united:'United',marketstreet:'Market Street',marketstreetutd:'Market Street'};
+
+var STORES=[];
+var renderLimit=60;
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function httpsUpgrade(u){ return u && u.indexOf('http://')===0 ? 'https://'+u.slice(7) : u; }
+function showToast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(function(){t.classList.remove('show')},4200); }
+
+function filteredStores(){
+ var q=(document.getElementById('search').value||'').trim().toLowerCase();
+ var b=document.getElementById('bannerSel').value;
+ return STORES.filter(function(s){
+   if(b && s.banner!==b) return false;
+   if(q && (s.id+' '+s.banner+' '+(s.storeName||'')+' '+(s.city||'')+' '+(s.state||'')).toLowerCase().indexOf(q)===-1) return false;
+   return true;
+ });
+}
+function render(){
+ var list=filteredStores();
+ var shown=list.slice(0,renderLimit);
+ document.getElementById('empty').style.display=(STORES.length && !list.length)?'block':'none';
+ var more=document.getElementById('moreBtn');
+ if(list.length>shown.length){ more.style.display='block'; more.textContent='Show more stores — '+shown.length+' of '+list.length+' shown'; } else { more.style.display='none'; }
+ document.getElementById('results').innerHTML=shown.map(function(s){
+   var title=s.banner+' '+s.id+(s.storeName?' · '+s.storeName:'');
+   var loc=[s.city,s.state].filter(Boolean).join(', ');
+   return '<article class="card store">'
+   +'<div class="imgframe"><a href="'+esc(s.hero)+'" target="_blank" rel="noopener" title="Open full front cover"><img loading="lazy" decoding="async" src="'+esc(s.hero)+'" alt="Front cover for '+esc(title)+'" onerror="this.style.display=\'none\';this.parentNode.nextElementSibling.style.display=\'grid\'"></a><div class="imgfail">Front cover couldn\u2019t load</div></div>'
+   +'<div class="store-name">'+esc(title)+'</div>'
+   +(loc?'<div class="store-meta">'+esc(loc)+'</div>':'')
+   +'<a class="btn dark" href="'+esc(s.circular)+'" target="_blank" rel="noopener">View landing page \u2197</a>'
+   +'</article>';
+ }).join('');
+}
+function rebuildBanners(){
+ var sel=document.getElementById('bannerSel'); var cur=sel.value; var seen={};
+ sel.innerHTML='<option value="">All banners</option>'+STORES.map(function(s){return s.banner}).filter(function(x){ if(seen[x]) return false; seen[x]=1; return true; }).sort().map(function(x){return '<option'+(x===cur?' selected':'')+'>'+esc(x)+'</option>'}).join('');
+}
+document.getElementById('bannerSel').addEventListener('change',function(){ renderLimit=60; render(); });
+document.getElementById('search').addEventListener('input',function(){ renderLimit=60; render(); });
+document.getElementById('moreBtn').addEventListener('click',function(){ renderLimit+=120; render(); });
+
+/* --- Feed parsing: .csv / .tsv / .txt, delimiter auto-detect, columns by header name.
+   HeroImgUrl is the front-cover image; CircularURL is that store's landing page. --- */
+function detectDelim(text){
+ var nl=text.indexOf('\n'); var first=nl>0?text.slice(0,nl):text.slice(0,4000);
+ var tabs=0, commas=0, inQ=false;
+ for(var i=0;i<first.length;i++){ var ch=first[i];
+   if(ch==='"'){ inQ=!inQ; }
+   else if(!inQ){ if(ch==='\t') tabs++; else if(ch===',') commas++; }
+ }
+ return tabs>commas?'\t':',';
+}
+function parseDelimited(text,delim){
+ var rows=[], row=[], cur='', inQ=false, i, ch;
+ for(i=0;i<text.length;i++){ ch=text[i];
+   if(inQ){ if(ch==='"'){ if(text[i+1]==='"'){ cur+='"'; i++; } else inQ=false; } else cur+=ch; }
+   else if(ch==='"') inQ=true;
+   else if(ch===delim){ row.push(cur); cur=''; }
+   else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(cur); cur=''; if(row.some(function(c){return c.trim()!==''})) rows.push(row); row=[]; }
+   else cur+=ch;
+ }
+ row.push(cur); if(row.some(function(c){return c.trim()!==''})) rows.push(row);
+ return rows;
+}
+function colIdx(head,aliases){
+ for(var a=0;a<aliases.length;a++){ var ix=head.indexOf(aliases[a]); if(ix>=0) return ix; }
+ return -1;
+}
+function bannerFromCircular(u){
+ try{ var host=new URL(u).hostname.toLowerCase().replace(/^(www\d?|coupons)\./,''); var base=host.split('.')[0]; return {key:DOMAIN_KEY[base]||base, banner:BANNER_NAME[base]||base}; }catch(e){ return {key:'',banner:'Store'}; }
+}
+function cell(r,ix){ return ix>=0?(r[ix]||'').trim():''; }
+
+function processFeedText(t, fname){
+ if(t.charCodeAt(0)===0xFEFF) t=t.slice(1);
+ var delim=detectDelim(t);
+ var rows=parseDelimited(t,delim);
+ if(rows.length<2){ showToast('That file has no data rows.'); return; }
+ var head=rows[0].map(function(h){ return h.replace(/^\uFEFF/,'').trim().toLowerCase(); });
+ var ci=colIdx(head,['circularurl','circular_url','landingpageurl','landingpage','landingurl']);
+ var hi=colIdx(head,['heroimgurl','heroimageurl','heroimage','heroimg','herourl']);
+ var si=colIdx(head,['safewaystoreid','storeid','store_id','store','storenumber','store_number']);
+ var ni=colIdx(head,['storename','store_name']);
+ var cti=colIdx(head,['storecity','city']);
+ var sti=colIdx(head,['storestate','state']);
+ if(ci<0||hi<0){ showToast('Expected a CircularURL column and a HeroImgUrl (or HeroImage) column — check the file header.'); return; }
+ var out=[];
+ rows.slice(1).forEach(function(r){
+   var hero=cell(r,hi), circ=cell(r,ci);
+   if(!hero || !circ) return;
+   var bn=bannerFromCircular(circ);
+   out.push({id:cell(r,si)||'(no ID)', banner:bn.banner||'Store', circular:circ, hero:httpsUpgrade(hero),
+     storeName:cell(r,ni), city:cell(r,cti), state:cell(r,sti)});
+ });
+ if(!out.length){ showToast('No rows with a front-cover image and landing page found in that file.'); return; }
+ STORES=out; renderLimit=60;
+ document.getElementById('search').value='';
+ document.getElementById('toolbar').classList.add('show');
+ document.getElementById('fileInfo').textContent=fname+' — '+out.length+' stores';
+ rebuildBanners(); render();
+ showToast('Loaded '+fname+' — '+out.length+' stores.');
+}
+function handleFeedFile(f){
+ if(!f) return;
+ if(!/\.(csv|tsv|txt)$/i.test(f.name) && f.type.indexOf('text')!==0 && f.type!==''){ showToast('Please choose a .csv, .tsv or .txt feed file.'); return; }
+ if(f.text){ f.text().then(function(t){ processFeedText(t,f.name); }).catch(function(){ readViaReader(f); }); }
+ else { readViaReader(f); }
+}
+function readViaReader(f){
+ var rd=new FileReader();
+ rd.onload=function(){ processFeedText(String(rd.result||''), f.name); };
+ rd.onerror=function(){ showToast('Could not read that file.'); };
+ rd.readAsText(f);
+}
+document.getElementById('csvFile').addEventListener('change',function(){ handleFeedFile(this.files[0]); this.value=''; });
+document.getElementById('uploadBox').addEventListener('click',function(){ document.getElementById('csvFile').click(); });
+document.getElementById('uploadBox').addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); document.getElementById('csvFile').click(); } });
+/* Drag and drop anywhere on the page */
+var dragDepth=0;
+window.addEventListener('dragenter',function(e){ e.preventDefault(); dragDepth++; document.getElementById('dropOverlay').classList.add('show'); document.getElementById('uploadBox').classList.add('dragging'); });
+window.addEventListener('dragover',function(e){ e.preventDefault(); });
+window.addEventListener('dragleave',function(e){ dragDepth=Math.max(0,dragDepth-1); if(!dragDepth){ document.getElementById('dropOverlay').classList.remove('show'); document.getElementById('uploadBox').classList.remove('dragging'); } });
+window.addEventListener('drop',function(e){ e.preventDefault(); dragDepth=0; document.getElementById('dropOverlay').classList.remove('show'); document.getElementById('uploadBox').classList.remove('dragging'); if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){ handleFeedFile(e.dataTransfer.files[0]); } });
+</script>
+</body>
+</html>
